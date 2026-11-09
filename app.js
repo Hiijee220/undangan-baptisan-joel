@@ -1,0 +1,110 @@
+import {resolveGuestName} from './guest-links.mjs?v=share-9';
+const PROJECT_ID="jeivan-82577";
+const DOCUMENT_ROOT=`https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
+const INVITATION_ROOT=`${DOCUMENT_ROOT}/invitationTamanRomantis/`;
+
+import {defaults as fallback} from './defaults.js?v=audio-8';
+import {baptismContent} from './content.mjs?v=share-9';
+import {safeLink,safeImage,cleanRsvp} from './validation.mjs?v=music-5';
+
+import {createPhotoLoader,mapPhotos} from './photo-cache.mjs?v=music-5';
+
+import {createAutoScroller} from './auto-scroll.mjs?v=music-5';
+
+import {eventMap} from './map-locations.mjs?v=maps-10';
+
+const $=selector=>document.querySelector(selector);
+const safe=value=>String(value??"").replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
+function decodeValue(value={}){if("stringValue"in value)return value.stringValue;if("timestampValue"in value)return value.timestampValue;if("booleanValue"in value)return value.booleanValue;if("integerValue"in value)return Number(value.integerValue);if("doubleValue"in value)return value.doubleValue;if("arrayValue"in value)return(value.arrayValue.values||[]).map(decodeValue);if("mapValue"in value)return decodeFields(value.mapValue.fields||{});return null}
+function decodeFields(fields={}){return Object.fromEntries(Object.entries(fields).map(([key,value])=>[key,decodeValue(value)]))}
+async function getDocument(id){const response=await fetch(`${INVITATION_ROOT}${encodeURIComponent(id)}`,{cache:"no-store"});if(!response.ok)throw new Error(`Data ${id} tidak tersedia`);return decodeFields((await response.json()).fields||{})}
+const getImage=createPhotoLoader(async id=>(await getDocument(id)).dataUrl,{valid:safeImage});
+async function loadContent(){try{return baptismContent(await getDocument("content"))}catch(error){console.info("Data online belum tersedia, memakai data cadangan.",error.message);return{...fallback}}}
+
+let content={...fallback},eventDate=new Date(),countdownTimer=null,heroTimer=null,currentGallery=[],lightboxIndex=0,music=null,youtubeFrame=null,musicPlaying=false,musicKey="",invitationOpened=false;
+let guestFromLink=resolveGuestName(location.search,content);
+
+const scrollButton=$('#autoScrollButton');let previousScrollBehavior='';
+const autoScroller=createAutoScroller({position:()=>window.scrollY,limit:()=>Math.max(0,document.documentElement.scrollHeight-window.innerHeight),move:top=>window.scrollTo(0,top),request:callback=>requestAnimationFrame(callback),cancel:id=>cancelAnimationFrame(id),change:running=>{
+ if(running){previousScrollBehavior=document.documentElement.style.scrollBehavior;document.documentElement.style.scrollBehavior='auto'}else document.documentElement.style.scrollBehavior=previousScrollBehavior;
+ scrollButton.setAttribute('aria-pressed',String(running));scrollButton.setAttribute('aria-label',running?'Jeda gulir otomatis':'Mulai gulir otomatis');scrollButton.querySelector('small').textContent=running?'Jeda':'Gulir';scrollButton.querySelector('span').textContent=running?'Ⅱ':'↓';
+}});
+function configureAutoScroll(){autoScroller.setSpeed({slow:18,normal:28,fast:40}[content.autoScrollSpeed]||28);scrollButton.hidden=!invitationOpened;if(content.autoScrollEnabled==='no')autoScroller.pause()}
+scrollButton.onclick=()=>{if(autoScroller.running)autoScroller.pause();else autoScroller.start()};
+function pauseForInteraction(event){if(!event.target.closest?.('#autoScrollButton,#openInvitation')&&autoScroller.running)autoScroller.pause()}
+document.addEventListener('pointerdown',pauseForInteraction,{passive:true});document.addEventListener('touchstart',pauseForInteraction,{passive:true});document.addEventListener('wheel',()=>{if(autoScroller.running)autoScroller.pause()},{passive:true});document.addEventListener('keydown',event=>{if(['ArrowDown','ArrowUp','PageDown','PageUp','Home','End',' '].includes(event.key)&&autoScroller.running)autoScroller.pause()});document.addEventListener('visibilitychange',()=>{if(document.hidden&&autoScroller.running)autoScroller.pause()});
+
+function parseEventDate(){const date=String(content.date||'').trim(),time=/^\d{2}:\d{2}$/.test(content.eventStartTime||'')?content.eventStartTime:'00:00';eventDate=new Date(date+'T'+time+':00+08:00');const valid=!Number.isNaN(eventDate.getTime());content.dateDisplay=valid?new Intl.DateTimeFormat('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:'Asia/Makassar'}).format(eventDate):'Tanggal akan diumumkan';$('#countdown').hidden=!valid;$('.date-badge').hidden=!valid;}
+
+function setText(){document.querySelectorAll("[data-k]").forEach(element=>{const value=content[element.dataset.k];if(value!==undefined)element.textContent=value})}
+function setLink(selector,url){const element=$(selector);if(!element)return;const clean=safeLink(url);element.href=clean||"#";element.hidden=!clean}
+function setBackground(selector,url){const element=$(selector);url=safeImage(url);if(element&&url)element.style.backgroundImage=`url("${String(url).replace(/"/g,"%22")}")`}
+function setImage(selector,url){const element=$(selector);url=safeImage(url);if(element&&url)element.src=url}
+function updateCountdown(){if(Number.isNaN(eventDate.getTime()))return;const diff=Math.max(0,eventDate.getTime()-Date.now()),units=[864e5,36e5,6e4,1e3],labels=[content.countdownDay,content.countdownHour,content.countdownMinute,content.countdownSecond];let remaining=diff;$("#countdown").innerHTML=units.map((unit,index)=>{const value=Math.floor(remaining/unit);remaining%=unit;return`<span><b>${String(value).padStart(2,"0")}</b><small>${safe(labels[index])}</small></span>`}).join("")}
+function renderTimeline(images=[]){const storyImages=[1,2,3].map((number,index)=>images[index]||content.gallery[index]||content.coverImage),cards=[1,2,3].map((number,index)=>`<article class="story-card reveal"><i class="story-dot"></i><button class="story-photo-button" type="button" data-story-image="${index}" aria-label="Buka foto ${safe(content[`journey${number}Title`])} layar penuh"><img class="story-photo" src="${safe(storyImages[index])}" alt="${safe(content[`journey${number}Title`])}" loading="lazy"></button><div class="story-copy"><time>${safe(content[`journey${number}Year`])}</time><h3>${safe(content[`journey${number}Title`])}</h3><p>${safe(content[`journey${number}Text`])}</p></div></article>`).join("");$("#timeline").innerHTML=cards;document.querySelectorAll("[data-story-image]").forEach(button=>button.onclick=()=>openSingleLightbox(storyImages[Number(button.dataset.storyImage)]));observeReveals()}
+function renderGallery(urls){currentGallery=(urls||[]).map(safeImage).filter(Boolean);if(!currentGallery.length)currentGallery=[safeImage(content.childImage)||safeImage(content.coverImage)].filter(Boolean);$("#gallery").innerHTML=currentGallery.map((url,index)=>`<button class="gallery-item" type="button" data-gallery="${index}" aria-label="Buka foto ${index+1}"><img src="${safe(url)}" alt="Foto galeri ${index+1}" loading="lazy"></button>`).join("");document.querySelectorAll("[data-gallery]").forEach(button=>button.onclick=()=>openLightbox(Number(button.dataset.gallery)))}
+function renderVenueMaps(){for(const kind of ['ceremony','reception']){const frame=$(`#${kind}MapFrame`),location=eventMap(content,kind);setLink(`#${kind}Maps`,location.link);frame.hidden=!location.embed;if(location.embed){if(frame.getAttribute('src')!==location.embed)frame.src=location.embed}else frame.removeAttribute('src')}}
+function renderLinks(){renderVenueMaps();setLink("#childInstagram",content.childInstagramUrl);setLink("#familyInstagram",content.familyInstagramUrl);setLink("#whatsappLink",content.whatsappUrl);setLink("#instagramLink",content.instagramUrl);}
+function configureMusic(){$("#musicButton").title=content.musicTitle||"Musik Baptisan";const key=String(content.musicUrl||"").trim();if(key===musicKey)return;musicKey=key;music?.pause();music?.remove();music=null;youtubeFrame?.remove();youtubeFrame=null;musicPlaying=false;musicState(false);$("#musicButton").hidden=!key}
+function render(){
+  document.documentElement.dataset.theme=content.theme||"sky";parseEventDate();setText();configureAutoScroll();document.title=`${content.childName} — Undangan Baptisan`;$("#receptionCard").hidden=content.showReception==="no";$("#guestName").textContent=guestFromLink;$("#rsvpName").value=guestFromLink==="Bapak/Ibu/Saudara/i"?"":guestFromLink;
+  if(!Number.isNaN(eventDate.getTime())){const options={timeZone:'Asia/Makassar'};$("#eventMonth").textContent=eventDate.toLocaleDateString('id-ID',{...options,month:'short'}).replace('.','').toUpperCase();$("#eventDay").textContent=eventDate.toLocaleDateString('id-ID',{...options,day:'2-digit'});$("#eventYear").textContent=eventDate.toLocaleDateString('id-ID',{...options,year:'numeric'});}
+  setBackground("#coverPhoto",content.coverImage);setBackground("#desktopPhoto",content.coverImage);setBackground("#heroSlideA",content.coverImage);setBackground("#closingPhoto",content.closingImage||content.coverImage);setImage("#childPhoto",content.childImage);setImage("#familyPhoto",content.familyImage);
+  renderGallery(Array.isArray(content.gallery)?content.gallery:[]);renderTimeline();renderLinks();configureMusic();updateCountdown();clearInterval(countdownTimer);countdownTimer=setInterval(updateCountdown,1000);
+}
+
+async function hydrateImages(){
+  const coverId=content.coverId||content.heroId||'hero';
+  // Fetch and display the first-screen photo before requesting the rest.
+  const cover=await getImage(coverId,content.coverImage);
+  content.coverImage=cover;setBackground('#coverPhoto',cover);startHero([cover]);
+  const tasks=[
+    getImage(content.childImageId||content.coupleId,content.childImage).then(url=>{content.childImage=url;setImage('#childPhoto',url);if(!content.galleryIds?.length&&!content.gallery?.length)renderGallery([])}),
+    getImage(content.familyImageId||content.coupleId,content.familyImage).then(url=>{content.familyImage=url;setImage('#familyPhoto',url)}),
+    (async()=>{const ids=content.openingIds?.length?content.openingIds.slice(0,4):[coverId];const images=(await mapPhotos(ids,id=>getImage(id))).filter(Boolean);if(images.length)startHero(images)})(),
+    (async()=>{const ids=Array.isArray(content.galleryIds)?content.galleryIds:[];if(!ids.length)return;const urls=new Array(ids.length);await mapPhotos(ids,async(id,index)=>{urls[index]=await getImage(id);renderGallery(urls.filter(Boolean));observeReveals()})})(),
+    (async()=>{const ids=[content.story1ImageId,content.story2ImageId,content.story3ImageId],images=new Array(3);await mapPhotos(ids,async(id,index)=>{images[index]=await getImage(id,content.gallery[index]||cover);renderTimeline(images)})})()
+  ];
+  await Promise.all(tasks);observeReveals();
+}
+function startHero(images){clearInterval(heroTimer);if(!images.length)return;const a=$("#heroSlideA"),b=$("#heroSlideB");let index=0,front=a,back=b;setBackground("#heroSlideA",images[0]);a.classList.add("active");b.classList.remove("active");if(images.length<2)return;heroTimer=setInterval(()=>{index=(index+1)%images.length;setBackground(`#${back.id}`,images[index]);back.classList.add("active");front.classList.remove("active");[front,back]=[back,front]},5000)}
+
+function preparePhotoEffects(){
+  document.querySelectorAll(".person-photo").forEach((el,index)=>{el.classList.add("photo-reveal","photo-curtain");el.style.setProperty("--photo-delay",`${index*120}ms`)});
+  document.querySelectorAll(".story-photo-button").forEach((el,index)=>{el.classList.add("photo-reveal",index%2?"photo-from-right":"photo-from-left");el.style.setProperty("--photo-delay",`${Math.min(index,5)*90}ms`)});
+  document.querySelectorAll(".gallery-item").forEach((el,index)=>{el.classList.add("photo-reveal","photo-pop");el.style.setProperty("--photo-delay",`${(index%8)*65}ms`);el.style.setProperty("--photo-tilt",index%2?"1.7deg":"-1.7deg")});
+  document.querySelectorAll(".event-card,.date-badge").forEach((el,index)=>{el.classList.add("photo-reveal","card-rise");el.style.setProperty("--photo-delay",`${index*80}ms`)});
+}
+function observeReveals(){preparePhotoEffects();const selector=".reveal,.photo-reveal";if(!("IntersectionObserver"in window)){document.querySelectorAll(selector).forEach(el=>el.classList.add("visible"));return}if(!observeReveals.observer)observeReveals.observer=new IntersectionObserver(entries=>entries.forEach(entry=>{if(entry.isIntersecting){entry.target.classList.add("visible");entry.target.querySelectorAll?.(".photo-reveal").forEach(child=>child.classList.add("visible"));observeReveals.observer.unobserve(entry.target)}}),{threshold:.1,rootMargin:"0px 0px -4%"});document.querySelectorAll(".reveal:not(.visible),.photo-reveal:not(.visible)").forEach(el=>observeReveals.observer.observe(el))}
+function showToast(message){const toast=$("#toast");toast.textContent=message;toast.classList.add("show");clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>toast.classList.remove("show"),2600)}
+async function copyText(text){try{await navigator.clipboard.writeText(text);showToast("Berhasil disalin")}catch{const area=document.createElement("textarea");area.value=text;document.body.append(area);area.select();document.execCommand("copy");area.remove();showToast("Berhasil disalin")}}
+
+$("#openInvitation").onclick=()=>{invitationOpened=true;$("#cover").classList.add("opened");document.body.classList.remove("is-locked");$(".bottom-nav").classList.add("visible");$("#home").scrollIntoView({block:"start",behavior:"instant"});$("#cover").setAttribute("aria-hidden","true");$("#cover").inert=true;playMusic();configureAutoScroll();if(content.autoScrollEnabled!=="no"&&!window.matchMedia("(prefers-reduced-motion: reduce)").matches)autoScroller.start(1800)};
+$("#attendance").onchange=event=>{$("#guestCountWrap").hidden=event.target.value!=="hadir"};
+
+function setLightboxArrows(visible){$("#lightboxPrev").hidden=!visible;$("#lightboxNext").hidden=!visible}
+function showLightbox(url){if(autoScroller.running)autoScroller.pause();url=safeImage(url);if(!url)return;$("#lightboxImage").src=url;$("#lightbox").hidden=false;document.body.classList.add("is-locked")}
+function openLightbox(index){if(!currentGallery.length)return;lightboxIndex=(index+currentGallery.length)%currentGallery.length;setLightboxArrows(currentGallery.length>1);showLightbox(currentGallery[lightboxIndex])}
+function openSingleLightbox(url){lightboxIndex=-1;setLightboxArrows(false);showLightbox(url)}
+function closeLightbox(){$("#lightbox").hidden=true;$("#lightboxImage").removeAttribute("src");if(invitationOpened)document.body.classList.remove("is-locked")}
+$("#lightboxClose").onclick=closeLightbox;$("#lightboxPrev").onclick=()=>{if(lightboxIndex>=0)openLightbox(lightboxIndex-1)};$("#lightboxNext").onclick=()=>{if(lightboxIndex>=0)openLightbox(lightboxIndex+1)};$("#lightbox").onclick=event=>{if(event.target===$("#lightbox"))closeLightbox()};document.addEventListener("keydown",event=>{if(event.key==="Escape")closeLightbox()});
+
+function getYouTubeId(value=""){try{const url=new URL(value),host=url.hostname.replace(/^www\./,"");if(host==="youtu.be")return (url.pathname.split("/").filter(Boolean)[0]||"").match(/^[A-Za-z0-9_-]{11}$/)?.[0]||"";if((host==="youtube.com"||host==="m.youtube.com"||host==="music.youtube.com")){if(url.pathname==="/watch")return (url.searchParams.get("v")||"").match(/^[A-Za-z0-9_-]{11}$/)?.[0]||"";const parts=url.pathname.split("/").filter(Boolean);if(["embed","shorts","live"].includes(parts[0]))return (parts[1]||"").match(/^[A-Za-z0-9_-]{11}$/)?.[0]||""}}catch{}return""}
+function getGoogleDriveFileId(value=""){try{const url=new URL(value),host=url.hostname.replace(/^www\./,"");if(host!=="drive.google.com"&&host!=="drive.usercontent.google.com")return"";const match=url.pathname.match(/\/file\/d\/([^/]+)/);return match?.[1]||url.searchParams.get("id")||""}catch{return""}}
+function resolveAudioUrl(value=""){const driveId=getGoogleDriveFileId(value);if(!driveId)return value;return`https://drive.usercontent.google.com/download?id=${encodeURIComponent(driveId)}&export=download&confirm=t`}
+function musicState(playing){musicPlaying=playing;$("#musicButton").classList.toggle("playing",playing);$("#musicButton small").textContent=playing?"Pause":"Music"}
+function youtubeCommand(command){youtubeFrame?.contentWindow?.postMessage(JSON.stringify({event:"command",func:command,args:[]}),"https://www.youtube.com")}
+async function playMusic(){const originalUrl=String(content.musicUrl||"").trim();if(!safeLink(originalUrl))return;const youtubeId=getYouTubeId(originalUrl);if(youtubeId){if(!youtubeFrame){youtubeFrame=document.createElement("iframe");youtubeFrame.className="youtube-frame";youtubeFrame.allow="autoplay; encrypted-media";youtubeFrame.src=`https://www.youtube.com/embed/${youtubeId}?autoplay=1&playsinline=1&enablejsapi=1&loop=1&playlist=${youtubeId}`;document.body.append(youtubeFrame)}else youtubeCommand("playVideo");musicState(true);return}const driveId=getGoogleDriveFileId(originalUrl),url=resolveAudioUrl(originalUrl);if(!music){music=new Audio();music.id="backgroundMusic";music.style.display="none";if(driveId&&url.includes("drive.usercontent.google.com"))music.crossOrigin="anonymous";music.src=url;music.loop=true;music.preload="auto";music.playsInline=true;music.volume=.55;music.onplay=()=>musicState(true);music.onpause=()=>musicState(false);music.onerror=()=>{const failedMusic=music;music=null;failedMusic?.remove();musicState(false);showToast(driveId?"Musik gagal dimuat. Tekan Music untuk mencoba kembali":"Link musik belum dapat diputar")};document.body.append(music);music.load()}try{await music.play()}catch{const failedMusic=music;music=null;failedMusic?.pause();failedMusic?.remove();musicState(false);showToast("Tekan Music untuk mencoba kembali")}}
+function pauseMusic(){if(youtubeFrame)youtubeCommand("pauseVideo");music?.pause();musicState(false)}
+$("#musicButton").onclick=()=>musicPlaying?pauseMusic():playMusic();
+
+function firestoreString(value){return{stringValue:String(value??"")}}
+function firestoreInteger(value){return{integerValue:String(Number(value)||0)}}
+async function submitRsvp(values){values=cleanRsvp(values);const id=`rsvp-${Date.now()}-${crypto.getRandomValues(new Uint32Array(1))[0].toString(36)}`,body={fields:{name:firestoreString(values.name),message:firestoreString(values.message),attendance:firestoreString(values.attendance),guestCount:firestoreInteger(values.guestCount),createdAt:{timestampValue:new Date().toISOString()}}};const response=await fetch(`${DOCUMENT_ROOT}/invitationTamanRomantisResponses?documentId=${encodeURIComponent(id)}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});if(!response.ok)throw new Error("Ucapan belum dapat dikirim. Silakan hubungi penyelenggara atau coba lagi nanti.")}
+async function loadResponses(){try{const response=await fetch(`${DOCUMENT_ROOT}/invitationTamanRomantisResponses?pageSize=50&orderBy=createdAt%20desc`,{cache:"no-store"});if(!response.ok)throw new Error();const json=await response.json(),items=(json.documents||[]).map(document=>decodeFields(document.fields||{}));renderResponses(items)}catch{$("#wishes").innerHTML='<p class="form-status">Belum ada ucapan yang ditampilkan.</p>'}}
+function renderResponses(items){const counts={hadir:0,tidak_hadir:0,ragu:0};items.forEach(item=>{if(counts[item.attendance]!==undefined)counts[item.attendance]+=item.attendance==="hadir"?Math.max(1,Number(item.guestCount)||1):1});$("#attendingCount").textContent=counts.hadir;$("#notAttendingCount").textContent=counts.tidak_hadir;$("#maybeCount").textContent=counts.ragu;$("#wishes").innerHTML=items.map(item=>{const date=item.createdAt?new Date(item.createdAt).toLocaleDateString("id-ID",{day:"numeric",month:"short",year:"numeric"}):"";const label=item.attendance==="hadir"?`Hadir · ${item.guestCount||1} orang`:item.attendance==="tidak_hadir"?"Tidak hadir":"Masih ragu";return`<article class="wish"><div class="wish-head"><strong>${safe(item.name)}</strong><time>${safe(date)}</time></div><p>${safe(item.message)}</p><small>${safe(label)}</small></article>`}).join("")||'<p class="form-status">Jadilah yang pertama memberikan ucapan.</p>'}
+$("#rsvpForm").onsubmit=async event=>{event.preventDefault();const form=event.currentTarget,status=$("#rsvpStatus"),button=form.querySelector("button[type=submit]"),values=Object.fromEntries(new FormData(form));button.disabled=true;status.textContent="Mengirim ucapan...";try{await submitRsvp(values);status.textContent="Terima kasih. Ucapan Anda berhasil dikirim.";form.reset();$("#guestCountWrap").hidden=true;await loadResponses()}catch(error){status.textContent=error.message}finally{button.disabled=false}};
+
+render();observeReveals();$("#guestCountWrap").hidden=true;requestAnimationFrame(()=>$("#pageLoader").classList.add("hidden"));
+loadContent().then(async saved=>{content=saved;guestFromLink=resolveGuestName(location.search,content);render();await hydrateImages();observeReveals()});loadResponses();
+
