@@ -60,7 +60,7 @@ export const defaults={
   "whatsappUrl": "",
   "instagramUrl": "",
   "musicTitle": "Musik Baptisan Joel",
-  "musicUrl": "https://hiijee220.github.io/undangan-nikah-taman-romantis-web/audio/baptisan-joel-20261020.m4a",
+  "musicUrl": "https://hiijee220.github.io/undangan-baptisan-joel/audio/baptisan-joel-20261020.m4a",
   "theme": "sky",
   "navHome": "Home",
   "navChild": "Anak",
@@ -96,3 +96,4 @@ export const defaults={
   "autoScrollEnabled": "yes",
   "autoScrollSpeed": "normal"
 };
+

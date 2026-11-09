@@ -3,8 +3,8 @@ const PROJECT_ID="jeivan-82577";
 const DOCUMENT_ROOT=`https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
 const INVITATION_ROOT=`${DOCUMENT_ROOT}/invitationTamanRomantis/`;
 
-import {defaults as fallback} from './defaults.js?v=audio-8';
-import {baptismContent} from './content.mjs?v=share-9';
+import {defaults as fallback} from './defaults.js?v=baptisan-release-1';
+import {baptismContent} from './content.mjs?v=baptisan-release-1';
 import {safeLink,safeImage,cleanRsvp} from './validation.mjs?v=music-5';
 
 import {createPhotoLoader,mapPhotos} from './photo-cache.mjs?v=music-5';
@@ -100,11 +100,24 @@ $("#musicButton").onclick=()=>musicPlaying?pauseMusic():playMusic();
 
 function firestoreString(value){return{stringValue:String(value??"")}}
 function firestoreInteger(value){return{integerValue:String(Number(value)||0)}}
-async function submitRsvp(values){values=cleanRsvp(values);const id=`rsvp-${Date.now()}-${crypto.getRandomValues(new Uint32Array(1))[0].toString(36)}`,body={fields:{name:firestoreString(values.name),message:firestoreString(values.message),attendance:firestoreString(values.attendance),guestCount:firestoreInteger(values.guestCount),createdAt:{timestampValue:new Date().toISOString()}}};const response=await fetch(`${DOCUMENT_ROOT}/invitationTamanRomantisResponses?documentId=${encodeURIComponent(id)}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});if(!response.ok)throw new Error("Ucapan belum dapat dikirim. Silakan hubungi penyelenggara atau coba lagi nanti.")}
-async function loadResponses(){try{const response=await fetch(`${DOCUMENT_ROOT}/invitationTamanRomantisResponses?pageSize=50&orderBy=createdAt%20desc`,{cache:"no-store"});if(!response.ok)throw new Error();const json=await response.json(),items=(json.documents||[]).map(document=>decodeFields(document.fields||{}));renderResponses(items)}catch{$("#wishes").innerHTML='<p class="form-status">Belum ada ucapan yang ditampilkan.</p>'}}
-function renderResponses(items){const counts={hadir:0,tidak_hadir:0,ragu:0};items.forEach(item=>{if(counts[item.attendance]!==undefined)counts[item.attendance]+=item.attendance==="hadir"?Math.max(1,Number(item.guestCount)||1):1});$("#attendingCount").textContent=counts.hadir;$("#notAttendingCount").textContent=counts.tidak_hadir;$("#maybeCount").textContent=counts.ragu;$("#wishes").innerHTML=items.map(item=>{const date=item.createdAt?new Date(item.createdAt).toLocaleDateString("id-ID",{day:"numeric",month:"short",year:"numeric"}):"";const label=item.attendance==="hadir"?`Hadir · ${item.guestCount||1} orang`:item.attendance==="tidak_hadir"?"Tidak hadir":"Masih ragu";return`<article class="wish"><div class="wish-head"><strong>${safe(item.name)}</strong><time>${safe(date)}</time></div><p>${safe(item.message)}</p><small>${safe(label)}</small></article>`}).join("")||'<p class="form-status">Jadilah yang pertama memberikan ucapan.</p>'}
+async function submitRsvp(values){values=cleanRsvp(values);const id=`rsvp-${Date.now()}-${crypto.getRandomValues(new Uint32Array(1))[0].toString(36)}`,fields={name:firestoreString(values.name),message:firestoreString(values.message),attendance:firestoreString(values.attendance),guestCount:firestoreInteger(values.guestCount)};
+ const write={update:{name:`projects/${PROJECT_ID}/databases/(default)/documents/invitationTamanRomantisResponses/${id}`,fields},updateTransforms:[{fieldPath:'createdAt',setToServerValue:'REQUEST_TIME'}],currentDocument:{exists:false}};
+ const response=await fetch(DOCUMENT_ROOT+':commit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({writes:[write]})});if(!response.ok)throw new Error("Ucapan belum dapat dikirim. Silakan hubungi penyelenggara atau coba lagi nanti.");
+}
+async function loadResponses(){try{
+ const items=[],tokens=new Set();let token='';
+ do{
+  const params=new URLSearchParams({pageSize:'200',orderBy:'createdAt desc'});if(token)params.set('pageToken',token);
+  const response=await fetch(`${DOCUMENT_ROOT}/invitationTamanRomantisResponses?${params}`,{cache:'no-store'});if(!response.ok)throw new Error();
+  const json=await response.json();items.push(...(json.documents||[]).map(document=>decodeFields(document.fields||{})));
+  token=json.nextPageToken||'';if(token){if(tokens.has(token))throw new Error();tokens.add(token);}
+ }while(token);
+ renderResponses(items);
+}catch{$("#wishes").innerHTML='<p class="form-status">Daftar ucapan belum dapat dimuat. Muat ulang halaman untuk mencoba lagi.</p>'}}
+function renderResponses(items){const counts={hadir:0,tidak_hadir:0,ragu:0};items.forEach(item=>{if(counts[item.attendance]!==undefined)counts[item.attendance]+=item.attendance==="hadir"?Math.max(1,Number(item.guestCount)||1):1});$("#attendingCount").textContent=counts.hadir;$("#notAttendingCount").textContent=counts.tidak_hadir;$("#maybeCount").textContent=counts.ragu;$("#wishes").innerHTML=items.slice(0,50).map(item=>{const date=item.createdAt?new Date(item.createdAt).toLocaleDateString("id-ID",{day:"numeric",month:"short",year:"numeric"}):"";const label=item.attendance==="hadir"?`Hadir · ${item.guestCount||1} orang`:item.attendance==="tidak_hadir"?"Tidak hadir":"Masih ragu";return`<article class="wish"><div class="wish-head"><strong>${safe(item.name)}</strong><time>${safe(date)}</time></div><p>${safe(item.message)}</p><small>${safe(label)}</small></article>`}).join("")||'<p class="form-status">Jadilah yang pertama memberikan ucapan.</p>'}
 $("#rsvpForm").onsubmit=async event=>{event.preventDefault();const form=event.currentTarget,status=$("#rsvpStatus"),button=form.querySelector("button[type=submit]"),values=Object.fromEntries(new FormData(form));button.disabled=true;status.textContent="Mengirim ucapan...";try{await submitRsvp(values);status.textContent="Terima kasih. Ucapan Anda berhasil dikirim.";form.reset();$("#guestCountWrap").hidden=true;await loadResponses()}catch(error){status.textContent=error.message}finally{button.disabled=false}};
 
 render();observeReveals();$("#guestCountWrap").hidden=true;requestAnimationFrame(()=>$("#pageLoader").classList.add("hidden"));
 loadContent().then(async saved=>{content=saved;guestFromLink=resolveGuestName(location.search,content);render();await hydrateImages();observeReveals()});loadResponses();
+
 

@@ -1,4 +1,4 @@
-import {defaults} from './defaults.js?v=audio-8';
+import {defaults} from './defaults.js?v=baptisan-release-1';
 
 export function splitParents(value='') {
  const parts=String(value).split(/\s*(?:&|＆|\bdan\b)\s*/i).map(v=>v.trim()).filter(Boolean);
@@ -6,6 +6,7 @@ export function splitParents(value='') {
 }
 function completeBaptism(result,saved) {
  if(saved.musicRelease!==defaults.musicRelease){result.musicUrl=defaults.musicUrl;result.musicTitle=defaults.musicTitle;result.musicRelease=defaults.musicRelease;}
+ if(result.musicUrl==='https://hiijee220.github.io/undangan-nikah-taman-romantis-web/audio/baptisan-joel-20261020.m4a')result.musicUrl=defaults.musicUrl;
  const legacy=splitParents(saved.parentsNames);
  result.fatherName=String(saved.fatherName||legacy.fatherName||defaults.fatherName).trim();
  result.motherName=String(saved.motherName||legacy.motherName||defaults.motherName).trim();
@@ -20,3 +21,4 @@ export function baptismContent(saved={}) {
  for(const [key,value] of Object.entries(saved))if(value!=null&&(/Image(Id)?$|Ids$/.test(key)||['coverId','heroId','theme','musicUrl','musicTitle','revision','guestLinks'].includes(key)))result[key]=value;
  return completeBaptism(result,{});
 }
+

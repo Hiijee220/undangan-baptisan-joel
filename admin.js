@@ -1,7 +1,7 @@
 import {registerGuestLink,normalizeGuestName} from './guest-links.mjs?v=share-9';
 import{auth,db,CONTENT_COLLECTION,ADMIN_EMAIL}from"./firebase.js";
-import{defaults}from"./defaults.js?v=audio-8";
-import {baptismContent} from "./content.mjs?v=share-9";
+import{defaults}from"./defaults.js?v=baptisan-release-1";
+import {baptismContent} from "./content.mjs?v=baptisan-release-1";
 import{saveContent}from"./persistence.mjs?v=share-9";
 import{cleanContent,firebaseError,safeImage}from"./validation.mjs?v=music-5";
 import{GoogleAuthProvider,signInWithPopup,onAuthStateChanged,signOut,setPersistence,browserLocalPersistence,signInWithEmailAndPassword,sendPasswordResetEmail,sendEmailVerification}from"https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
@@ -122,3 +122,4 @@ $('#shareReadyLink').onclick=async()=>{
  }else{guestShareStatus.textContent='Gunakan Salin Link atau Buka WhatsApp di bawah.'}
 };
 $("#contentForm").onsubmit=async event=>{event.preventDefault();if(busy)return;busy=true;$("#contentForm").inert=true;try{new FormData(event.currentTarget).forEach((value,key)=>data[key]=value);data.theme=$("#theme").value;setStatus("Menyimpan semua perubahan...");await persistContent();setStatus("Semua perubahan berhasil disimpan dan langsung aktif.")}catch(error){setStatus(firebaseError(error),true)}finally{busy=false;$("#contentForm").inert=false}};
+
